@@ -4,19 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Store, LogIn, Loader2 } from "lucide-react";
 
-const QUICK = [
-  { username: "owner", label: "เจ้าของร้าน" },
-  { username: "manager", label: "ผู้จัดการ" },
-  { username: "cashier", label: "แคชเชียร์" },
-  { username: "waiter", label: "เสิร์ฟ" },
-  { username: "kitchen", label: "ครัว" },
-  { username: "stock", label: "สต็อก" },
-];
-
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("owner");
-  const [secret, setSecret] = useState("1234");
+  const [username, setUsername] = useState("");
+  const [secret, setSecret] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -80,25 +71,6 @@ export default function LoginPage() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
             เข้าสู่ระบบ / เปิดกะ
           </button>
-
-          <div className="pt-2">
-            <p className="label">เข้าสู่ระบบด่วน (PIN: 1234)</p>
-            <div className="grid grid-cols-3 gap-2">
-              {QUICK.map((q) => (
-                <button
-                  key={q.username}
-                  type="button"
-                  onClick={() => {
-                    setUsername(q.username);
-                    setSecret("1234");
-                  }}
-                  className="rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-600 hover:border-brand-400 hover:bg-brand-50"
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
         <p className="text-center text-brand-100 text-sm mt-4">
           ยังไม่มีบัญชี? <a href="/signup" className="font-semibold underline">สมัครใช้งานฟรี 14 วัน</a>
