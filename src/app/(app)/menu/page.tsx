@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { BookOpen, Plus, Pencil, Power, ChefHat, Clock, Trash2 } from "lucide-react";
+import { BookOpen, Plus, Pencil, Power, ChefHat, Clock, Trash2, ChevronUp, ChevronDown, FolderPlus } from "lucide-react";
 import { PageHeader, Modal, Badge } from "@/components/ui";
 import { baht } from "@/lib/format";
 import { hhmmToMin, minToHhmm, WEEKDAY_LABELS } from "@/lib/timewin";
 
 interface MenuItem { id: number; name: string; code: string; barcode?: string | null; price: number; cost: number; categoryId: number; isAvailable: boolean; isActive: boolean; isOpenPrice?: boolean; imageUrl?: string | null; }
-interface Category { id: number; name: string; items: MenuItem[]; }
+interface Category { id: number; name: string; station?: string | null; sortOrder?: number; items: MenuItem[]; }
 interface TimePrice { id: number; name: string; channel: string | null; days: string; startMin: number; endMin: number; price: number; priority: number; }
 const CHANNELS = [{ v: "", l: "ทุกช่องทาง" }, { v: "DINE_IN", l: "ทานที่ร้าน" }, { v: "TAKEAWAY", l: "กลับบ้าน" }, { v: "DELIVERY", l: "เดลิเวอรี" }];
 
@@ -16,6 +16,8 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addingCat, setAddingCat] = useState(false);
+  const [editingCat, setEditingCat] = useState<Category | null>(null);
 
   const load = useCallback(async () => {
     const d = await (await fetch("/api/menu")).json();
@@ -30,6 +32,16 @@ export default function MenuPage() {
     });
     load();
   }
+  async function moveCat(id: number, move: "up" | "down") {
+    await fetch(`/api/menu/categories/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ move }) });
+    load();
+  }
+  async function delCat(c: Category) {
+    if (!confirm(`ลบหมวด "${c.name}"?`)) return;
+    const res = await fetch(`/api/menu/categories/${c.id}`, { method: "DELETE" });
+    if (!res.ok) alert((await res.json()).error?.message ?? "ลบไม่สำเร็จ");
+    load();
+  }
 
   return (
     <div className="p-6">
@@ -38,6 +50,7 @@ export default function MenuPage() {
         actions={
           <>
             <Link href="/recipes" className="btn-ghost"><ChefHat className="h-4 w-4" /> สูตร/BOM</Link>
+            <button onClick={() => setAddingCat(true)} className="btn-ghost"><FolderPlus className="h-4 w-4" /> เพิ่มหมวด</button>
             <button onClick={() => setAdding(true)} className="btn-primary"><Plus className="h-4 w-4" /> เพิ่มเมนู</button>
           </>
         }
@@ -46,8 +59,14 @@ export default function MenuPage() {
       <div className="space-y-6">
         {categories.map((c) => (
           <div key={c.id} className="card overflow-hidden">
-            <div className="bg-gray-50 px-4 py-2.5 font-semibold text-gray-700 border-b border-gray-200">
-              {c.name} <span className="text-gray-400 font-normal">({c.items.filter((i) => i.isActive).length})</span>
+            <div className="bg-gray-50 px-4 py-2.5 font-semibold text-gray-700 border-b border-gray-200 flex items-center justify-between">
+              <span>{c.name} <span className="text-gray-400 font-normal">({c.items.filter((i) => i.isActive).length})</span>{c.station && <span className="ml-2 text-xs font-normal text-gray-400">จุด: {c.station}</span>}</span>
+              <span className="flex items-center gap-1 text-gray-400">
+                <button onClick={() => moveCat(c.id, "up")} title="เลื่อนขึ้น" className="hover:text-brand-600"><ChevronUp className="h-4 w-4" /></button>
+                <button onClick={() => moveCat(c.id, "down")} title="เลื่อนลง" className="hover:text-brand-600"><ChevronDown className="h-4 w-4" /></button>
+                <button onClick={() => setEditingCat(c)} title="แก้ไขหมวด" className="hover:text-brand-600 ml-1"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => delCat(c)} title="ลบหมวด" className="hover:text-rose-600"><Trash2 className="h-4 w-4" /></button>
+              </span>
             </div>
             <table className="w-full text-sm">
               <thead className="text-xs text-gray-400 border-b border-gray-100">
@@ -79,7 +98,37 @@ export default function MenuPage() {
 
       <EditModal item={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
       <AddModal open={adding} categories={categories} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />
+      <CategoryModal open={addingCat} cat={null} onClose={() => setAddingCat(false)} onSaved={() => { setAddingCat(false); load(); }} />
+      <CategoryModal open={!!editingCat} cat={editingCat} onClose={() => setEditingCat(null)} onSaved={() => { setEditingCat(null); load(); }} />
     </div>
+  );
+}
+
+function CategoryModal({ open, cat, onClose, onSaved }: { open: boolean; cat: Category | null; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState("");
+  const [station, setStation] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => { if (open) { setName(cat?.name ?? ""); setStation(cat?.station ?? ""); setErr(""); } }, [open, cat]);
+
+  async function save() {
+    setErr("");
+    if (!name.trim()) { setErr("กรอกชื่อหมวด"); return; }
+    const res = cat
+      ? await fetch(`/api/menu/categories/${cat.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), station: station.trim() || null }) })
+      : await fetch("/api/menu/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), station: station.trim() || undefined }) });
+    if (res.ok) onSaved();
+    else setErr((await res.json()).error?.message ?? "บันทึกไม่สำเร็จ");
+  }
+  return (
+    <Modal open={open} onClose={onClose} title={cat ? "แก้ไขหมวด" : "เพิ่มหมวดเมนู"}>
+      <div className="space-y-3">
+        <div><label className="label">ชื่อหมวด</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น อาหารจานเดียว" autoFocus /></div>
+        <div><label className="label">จุดครัว (station) — ไม่บังคับ</label><input className="input" value={station} onChange={(e) => setStation(e.target.value)} placeholder="เช่น ครัวร้อน, เครื่องดื่ม" /></div>
+        <p className="text-xs text-gray-400">จุดครัวใช้ route ตั๋วครัวไปเครื่องพิมพ์ของจุดนั้น</p>
+        {err && <p className="text-sm text-rose-600">{err}</p>}
+        <button onClick={save} className="btn-primary w-full">{cat ? "บันทึก" : "เพิ่มหมวด"}</button>
+      </div>
+    </Modal>
   );
 }
 
