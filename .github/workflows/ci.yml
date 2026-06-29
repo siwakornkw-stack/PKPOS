@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pos
+          POSTGRES_PASSWORD: pos
+          POSTGRES_DB: resto_pos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: "postgresql://pos:pos@localhost:5432/resto_pos?schema=public"
+      JWT_SECRET: "ci-test-secret-not-used-in-production-32c"
+      CRON_SECRET: "ci-cron-secret"
+      DELIVERY_WEBHOOK_SECRET: "ci-delivery-secret"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run db:seed
+      - run: npx tsx scripts/verify-tenant-delete.ts
+      - run: npm run build
+      - name: E2E smoke (start server, run all smoke scripts)
+        run: |
+          npm start &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health >/dev/null; then echo "server up"; break; fi
+            sleep 1
+          done
+          node scripts/smoke.mjs
+          node scripts/smoke-saas.mjs
+          node scripts/verify-ocha.mjs

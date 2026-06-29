@@ -1,0 +1,36 @@
+# Production-style stack: Next.js app + PostgreSQL.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pos
+      # set in an untracked .env file next to this compose; compose refuses to start unset
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: resto_pos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://pos:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/resto_pos?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a long random value}
+      NODE_ENV: production
+      TZ: Asia/Bangkok # local business time for doc numbers + report day/hour buckets
+    ports:
+      - "3000:3000"
+    # first run: apply migrations + seed (master data only)
+    command: sh -c "npx prisma migrate deploy && SEED_DEMO=false npx tsx prisma/seed.ts && node server.js"
+
+volumes:
+  pgdata:

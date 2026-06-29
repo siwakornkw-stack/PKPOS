@@ -1,0 +1,12 @@
+# Keep local secrets + rebuildable artifacts out of the Vercel upload.
+# (When this file exists, Vercel uses it INSTEAD of .gitignore for deploy.)
+.env
+.env.*
+node_modules
+.next
+.git
+*.log
+.server.log
+tsconfig.tsbuildinfo
+# the original design-deck screenshots (not needed at runtime)
+*_n.jpg

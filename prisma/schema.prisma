@@ -1,0 +1,720 @@
+// Restaurant POS - data model (faithful to the Data Design slide).
+// PostgreSQL; migrations in prisma/migrations (apply with `prisma migrate deploy`).
+// Money is Float, round2'd at every write (exact for THB satang). Switch to
+// Decimal(14,2) only if an auditor mandates fixed-precision storage.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"] // native (local) + Vercel runtime
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (PgBouncer) for runtime queries
+  directUrl = env("DATABASE_URL_UNPOOLED") // direct connection for migrations (Neon pooler can't run them)
+}
+
+// ----- SaaS: tenant (one restaurant business/account) + billing -----
+
+model Tenant {
+  id               Int       @id @default(autoincrement())
+  name             String
+  slug             String    @unique
+  plan             String    @default("TRIAL") // TRIAL | BASIC | PRO
+  status           String    @default("TRIAL") // TRIAL | ACTIVE | SUSPENDED | CANCELLED
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  createdAt        DateTime  @default(now())
+
+  // Saved payment method for auto-renew (Omise customer holds the card token; we never store the PAN)
+  omiseCustomerId String?
+  cardBrand       String?
+  cardLast4       String?
+  cardExpMonth    Int?
+  cardExpYear     Int?
+  renewalFailedAt DateTime? // first failed auto-charge; drives the dunning grace window
+
+  branches             Branch[]
+  users                User[]
+  invoices             Invoice[]
+  members              Member[]
+  tiers                MemberTier[]
+  rewards              Reward[]
+  subscriptionPayments SubscriptionPayment[]
+}
+
+// Manual subscription payment (PromptPay / bank transfer): tenant submits a slip,
+// platform super-admin reviews and approves (activates the plan) or rejects.
+model SubscriptionPayment {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  plan       String // BASIC | PRO
+  amount     Float
+  method     String    @default("TRANSFER") // TRANSFER | PROMPTPAY
+  slipUrl    String? // uploaded slip image (data URL); small, low-volume
+  ref        String? // transfer reference / note from the tenant
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedBy Int? // super-admin user id
+  reviewedAt DateTime?
+  note       String? // admin note / rejection reason
+  createdAt  DateTime  @default(now())
+
+  @@index([status])
+  @@index([tenantId])
+}
+
+model Invoice {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  plan           String
+  amount         Float
+  status         String   @default("PAID") // PAID | PENDING | FAILED
+  periodStart    DateTime
+  periodEnd      DateTime
+  omiseChargeId  String? // chrg_xxx from the gateway (null in mock mode)
+  failureMessage String?
+  createdAt      DateTime @default(now())
+
+  // dedup backstop: one charge id can be recorded at most once (nullable -> many nulls OK in mock mode)
+  @@unique([omiseChargeId])
+}
+
+// Platform-wide settings (single row, id=1). Super-admin editable at runtime so the
+// subscription PromptPay QR / bank info can change without an env change + redeploy.
+model PlatformSetting {
+  id             Int      @id @default(1)
+  promptPayId    String? // optional: generate a dynamic QR (with amount) from this id
+  promptPayImage String? // optional: an uploaded static PromptPay QR image (data URL) - wins over generated
+  bankInfo       String? // bank name / account shown under the QR
+  updatedBy      Int?
+  updatedAt      DateTime @default(now()) @updatedAt
+}
+
+// ----- Master: branch / roles / users -----
+
+model Branch {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  code             String   @unique // BR01
+  name             String
+  address          String?
+  phone            String?
+  taxId            String?
+  taxRate          Float    @default(0.07) // VAT
+  serviceRate      Float    @default(0.10) // dine-in service charge
+  receiptHeader    String?
+  receiptFooter    String?
+  promptPayId      String? // phone or national id for PromptPay QR
+  paymentProvider  String   @default("MOCK") // MOCK | OMISE
+  omiseSecretKey   String?
+  omisePublicKey   String?
+  // integrations (optional; adapter runs in mock/no-op mode when unset) - see src/lib/integrations
+  lineChannelToken String? // LINE OA channel access token (push e-receipt / bind member)
+  grabStoreId      String? // GrabFood merchant/store id
+  lineManStoreId   String? // LINE MAN store id
+  shopeeStoreId    String? // ShopeeFood store id
+  etaxEnabled      Boolean  @default(false) // submit full tax invoices to e-Tax
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users          User[]
+  tables         DiningTable[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  ingredients    Ingredient[]
+  suppliers      Supplier[]
+  salesOrders    SalesOrder[]
+  shifts         Shift[]
+  stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  bookings       Booking[]
+  promotions     Promotion[]
+  notifications  Notification[]
+  optionGroups   OptionGroup[]
+  vouchers       Voucher[]
+  printers       Printer[]
+  cashMovements  CashMovement[]
+  attendances    Attendance[]
+}
+
+// Network (ESC/POS) printer. Add via Settings -> เครื่องพิมพ์.
+model Printer {
+  id       Int     @id @default(autoincrement())
+  branchId Int
+  branch   Branch  @relation(fields: [branchId], references: [id])
+  name     String
+  host     String // IP or hostname
+  port     Int     @default(9100)
+  type     String // RECEIPT | KITCHEN
+  station  String? // KITCHEN only: which station it serves (null = all)
+  isActive Boolean @default(true)
+}
+
+// Single-use voucher/gift code (distinct from reusable Promotion).
+model Voucher {
+  id        Int       @id @default(autoincrement())
+  branchId  Int
+  branch    Branch    @relation(fields: [branchId], references: [id])
+  code      String
+  type      String // AMOUNT | PERCENT
+  value     Float
+  minSpend  Float     @default(0)
+  used      Boolean   @default(false)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([branchId, code])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  type      String // LOW_STOCK, DAILY_SUMMARY, SHIFT, INFO
+  title     String
+  body      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([branchId, isRead])
+}
+
+model Role {
+  id          Int    @id @default(autoincrement())
+  code        String @unique // OWNER, MANAGER, CASHIER, WAITER, KITCHEN, STOCK, AUDITOR
+  name        String
+  permissions String // JSON array of permission keys
+  users       User[]
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  pin          String? // hashed 4-6 digit quick login
+  passwordHash String
+  fullName     String
+  roleId       Int
+  role         Role      @relation(fields: [roleId], references: [id])
+  branchId     Int?
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  tenantId     Int?
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id])
+  isSuperAdmin Boolean   @default(false) // platform owner, not a tenant user
+  isActive     Boolean   @default(true)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  tokenVersion Int       @default(0) // bumped on logout -> invalidates that user's existing JWTs
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  shifts      Shift[]
+  salesOrders SalesOrder[]
+  auditLogs   AuditLog[]
+  attendances Attendance[]
+}
+
+// ----- Tables / layout -----
+
+model DiningTable {
+  id       Int     @id @default(autoincrement())
+  branchId Int
+  branch   Branch  @relation(fields: [branchId], references: [id])
+  code     String // A1, T-05
+  zone     String? // Indoor / Outdoor / Zone A
+  seats    Int     @default(4)
+  status   String  @default("AVAILABLE") // AVAILABLE, OCCUPIED, RESERVED, BILL
+  qrToken  String? @unique // for QR self-ordering link
+  posX     Int     @default(0)
+  posY     Int     @default(0)
+
+  salesOrders SalesOrder[]
+  bookings    Booking[]
+
+  @@unique([branchId, code])
+}
+
+// ----- Menu / pricing / recipe (BOM) -----
+
+model MenuCategory {
+  id        Int     @id @default(autoincrement())
+  branchId  Int
+  branch    Branch  @relation(fields: [branchId], references: [id])
+  name      String
+  icon      String?
+  station   String? // kitchen station/printer routing (e.g. ครัวร้อน, เครื่องดื่ม)
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  items MenuItem[]
+}
+
+model MenuItem {
+  id          Int          @id @default(autoincrement())
+  branchId    Int
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  categoryId  Int
+  category    MenuCategory @relation(fields: [categoryId], references: [id])
+  code        String
+  barcode     String? // scannable barcode/SKU (packaged goods); unique per branch
+  name        String
+  description String?
+  price       Float
+  cost        Float        @default(0)
+  color       String? // tile color hint
+  isCombo     Boolean      @default(false) // bundle of other items (set menu)
+  isOpenPrice Boolean      @default(false) // cashier enters the price at sale time (ราคาเปิด)
+  isActive    Boolean      @default(true)
+  isAvailable Boolean      @default(true) // 86 / out-of-stock toggle
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  orderItems      SalesOrderItem[]
+  recipeItems     RecipeItem[]
+  optionGroups    MenuItemOptionGroup[]
+  prices          MenuPrice[]
+  timePrices      MenuTimePrice[]
+  comboComponents ComboComponent[]      @relation("ComboParent")
+  inCombos        ComboComponent[]      @relation("ComboChild")
+
+  @@unique([branchId, code])
+  @@unique([branchId, barcode])
+}
+
+// A line of a combo/set menu: the combo item -> a component item x qty.
+model ComboComponent {
+  id         Int      @id @default(autoincrement())
+  comboId    Int
+  combo      MenuItem @relation("ComboParent", fields: [comboId], references: [id], onDelete: Cascade)
+  menuItemId Int
+  menuItem   MenuItem @relation("ComboChild", fields: [menuItemId], references: [id])
+  qty        Int      @default(1)
+}
+
+// Per-channel price override (dine-in / takeaway / delivery). No row = base price.
+model MenuPrice {
+  id         Int      @id @default(autoincrement())
+  menuItemId Int
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  channel    String // DINE_IN | TAKEAWAY | DELIVERY
+  price      Float
+
+  @@unique([menuItemId, channel])
+}
+
+// Time-window price override (happy hour / lunch vs dinner). Wins over MenuPrice
+// when "now" is inside the window; highest priority match applies.
+model MenuTimePrice {
+  id         Int      @id @default(autoincrement())
+  menuItemId Int
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name       String // "Happy Hour", "Lunch set"
+  channel    String? // null = applies to all channels
+  days       String   @default("0123456") // weekday digits, 0=Sun .. 6=Sat
+  startMin   Int // minutes from midnight, inclusive
+  endMin     Int // minutes from midnight, exclusive; endMin <= startMin => window wraps past midnight
+  price      Float
+  priority   Int      @default(0)
+  isActive   Boolean  @default(true)
+}
+
+// Modifier groups (ตัวเลือก/ท็อปปิ้ง): sweetness, extras, etc.
+model OptionGroup {
+  id        Int     @id @default(autoincrement())
+  branchId  Int
+  branch    Branch  @relation(fields: [branchId], references: [id])
+  name      String
+  minSelect Int     @default(0)
+  maxSelect Int     @default(1)
+  required  Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  options   Option[]
+  menuItems MenuItemOptionGroup[]
+}
+
+model Option {
+  id         Int         @id @default(autoincrement())
+  groupId    Int
+  group      OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name       String
+  priceDelta Float       @default(0)
+  sortOrder  Int         @default(0)
+}
+
+model MenuItemOptionGroup {
+  id         Int         @id @default(autoincrement())
+  menuItemId Int
+  menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  groupId    Int
+  group      OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, groupId])
+}
+
+model Ingredient {
+  id           Int     @id @default(autoincrement())
+  branchId     Int
+  branch       Branch  @relation(fields: [branchId], references: [id])
+  code         String
+  name         String
+  unit         String // g, ml, pcs
+  stockQty     Float   @default(0)
+  reorderLevel Float   @default(0)
+  costPerUnit  Float   @default(0)
+  isActive     Boolean @default(true)
+
+  recipeItems    RecipeItem[]
+  stockMovements StockMovement[]
+  poItems        PurchaseOrderItem[]
+
+  @@unique([branchId, code])
+}
+
+model RecipeItem {
+  id           Int        @id @default(autoincrement())
+  menuItemId   Int
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  qty          Float // amount of ingredient per 1 menu item
+}
+
+// ----- Procurement -----
+
+model Supplier {
+  id       Int     @id @default(autoincrement())
+  branchId Int
+  branch   Branch  @relation(fields: [branchId], references: [id])
+  code     String
+  name     String
+  phone    String?
+  taxId    String?
+
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([branchId, code])
+}
+
+model PurchaseOrder {
+  id          Int       @id @default(autoincrement())
+  docNo       String    @unique
+  branchId    Int
+  branch      Branch    @relation(fields: [branchId], references: [id])
+  supplierId  Int
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  status      String    @default("DRAFT") // DRAFT, ORDERED, RECEIVED, CANCELLED
+  totalAmount Float     @default(0)
+  note        String?
+  createdAt   DateTime  @default(now())
+  receivedAt  DateTime?
+
+  items PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id           Int           @id @default(autoincrement())
+  poId         Int
+  po           PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  ingredientId Int
+  ingredient   Ingredient    @relation(fields: [ingredientId], references: [id])
+  qty          Float
+  unitCost     Float
+  lineAmount   Float
+}
+
+model StockMovement {
+  id           Int        @id @default(autoincrement())
+  docNo        String     @unique
+  branchId     Int
+  branch       Branch     @relation(fields: [branchId], references: [id])
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  type         String // RECEIVE, ISSUE, SALE_DEDUCT, ADJUST, COUNT
+  qty          Float // signed: + in, - out
+  balanceAfter Float
+  refType      String?
+  refId        Int?
+  note         String?
+  createdBy    Int?
+  createdAt    DateTime   @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([ingredientId])
+}
+
+// ----- Sales / payments -----
+
+model SalesOrder {
+  id              Int          @id @default(autoincrement())
+  docNo           String       @unique
+  idempotencyKey  String?      @unique // dedup offline-queued orders on sync
+  branchId        Int
+  branch          Branch       @relation(fields: [branchId], references: [id])
+  orderType       String       @default("DINE_IN") // DINE_IN, TAKEAWAY, DELIVERY
+  tableId         Int?
+  table           DiningTable? @relation(fields: [tableId], references: [id])
+  bookingId       Int? // linked reservation (deposit credited to this bill at payment)
+  booking         Booking?     @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  shiftId         Int?
+  shift           Shift?       @relation(fields: [shiftId], references: [id])
+  userId          Int
+  user            User         @relation(fields: [userId], references: [id])
+  memberId        Int?
+  member          Member?      @relation(fields: [memberId], references: [id])
+  status          String       @default("DRAFT") // DRAFT, SENT, SERVED, HELD, PAID, VOID, CLOSED, REFUNDED
+  guestCount      Int          @default(1)
+  subtotal        Float        @default(0)
+  discount        Float        @default(0)
+  serviceCharge   Float        @default(0)
+  taxAmount       Float        @default(0)
+  netAmount       Float        @default(0)
+  note            String?
+  holdName        String? // label when a takeaway bill is parked/held
+  queueNo         Int? // daily running queue number (takeaway/delivery)
+  noServiceCharge Boolean      @default(false) // service charge waived for this bill
+  promotionId     Int? // applied promotion (drives usedCount increment at payment)
+  rewardId        Int? // redeemed loyalty reward from the catalog applied to this bill
+  pointsRedeemed  Int          @default(0) // member loyalty points spent on this bill
+  pointsDiscount  Float        @default(0) // baht discount from redeemed points (1 point = 1 baht)
+  pointsEarned    Int          @default(0) // points granted at payment (tier multiplier applied); reversed exactly on refund
+  buyerName       String? // full tax invoice (ใบกำกับภาษีเต็มรูป) buyer details
+  buyerTaxId      String?
+  buyerAddress    String?
+  source          String       @default("POS") // POS | QR | GRAB | LINEMAN | SHOPEE | ROBINHOOD
+  externalRef     String? // aggregator's order id (delivery import)
+  etaxStatus      String? // null | PENDING | SUBMITTED | FAILED (e-Tax invoice)
+  etaxRef         String? // e-Tax provider reference
+  createdAt       DateTime     @default(now())
+  paidAt          DateTime?
+  closedAt        DateTime?
+
+  items    SalesOrderItem[]
+  payments Payment[]
+
+  @@index([branchId, status, paidAt]) // reports/dashboard/shift hot queries
+  @@index([branchId, createdAt])
+  @@index([shiftId])
+}
+
+model SalesOrderItem {
+  id         Int        @id @default(autoincrement())
+  orderId    Int
+  order      SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId Int
+  menuItem   MenuItem   @relation(fields: [menuItemId], references: [id])
+  name       String // snapshot of menu name at order time
+  qty        Int
+  unitPrice  Float
+  discount   Float      @default(0)
+  lineAmount Float
+  status     String     @default("PENDING") // PENDING, COOKING, DONE, SERVED, VOID
+  note       String?
+  createdAt  DateTime   @default(now())
+
+  options SalesOrderItemOption[]
+}
+
+// Snapshot of a chosen modifier option on an order line (name + price frozen).
+model SalesOrderItemOption {
+  id          Int            @id @default(autoincrement())
+  orderItemId Int
+  orderItem   SalesOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  name        String
+  priceDelta  Float          @default(0)
+}
+
+model Payment {
+  id        Int        @id @default(autoincrement())
+  docNo     String     @unique // receipt RC-...
+  orderId   Int
+  order     SalesOrder @relation(fields: [orderId], references: [id])
+  method    String // CASH, QR, CARD, REFUND
+  amount    Float
+  received  Float      @default(0)
+  change    Float      @default(0)
+  ref       String?
+  shiftId   Int? // the shift whose drawer this tender hit (refunds hit the issuing shift, not the sale's)
+  createdBy Int?
+  createdAt DateTime   @default(now())
+
+  @@index([shiftId])
+  @@index([orderId])
+}
+
+model Shift {
+  id           Int       @id @default(autoincrement())
+  branchId     Int
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id])
+  openingCash  Float     @default(0)
+  closingCash  Float?
+  expectedCash Float?
+  status       String    @default("OPEN") // OPEN, CLOSED
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+
+  salesOrders   SalesOrder[]
+  cashMovements CashMovement[]
+
+  @@index([branchId, userId, status])
+}
+
+// Non-sale cash drawer movement (petty cash in/out) tied to an open shift.
+model CashMovement {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  shiftId   Int
+  shift     Shift    @relation(fields: [shiftId], references: [id])
+  type      String // PAID_IN | PAID_OUT
+  amount    Float // always positive; type carries the sign
+  reason    String?
+  createdBy Int?
+  createdAt DateTime @default(now())
+
+  @@index([shiftId])
+}
+
+// Staff time clock (attendance). One open row (clockOut = null) per user at a time.
+model Attendance {
+  id       Int       @id @default(autoincrement())
+  branchId Int
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  userId   Int
+  user     User      @relation(fields: [userId], references: [id])
+  clockIn  DateTime  @default(now())
+  clockOut DateTime?
+  note     String?
+
+  @@index([branchId, userId])
+}
+
+// ----- Customer / member / booking -----
+
+model Member {
+  id         Int         @id @default(autoincrement())
+  tenantId   Int? // member belongs to one tenant (restaurant business)
+  tenant     Tenant?     @relation(fields: [tenantId], references: [id])
+  code       String
+  name       String
+  phone      String?
+  email      String?
+  points     Int         @default(0)
+  totalSpent Float       @default(0)
+  tierId     Int?
+  tier       MemberTier? @relation(fields: [tierId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  salesOrders SalesOrder[]
+  bookings    Booking[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, phone])
+}
+
+// Loyalty tier (tenant-wide): reached by totalSpent, sets the point-earn multiplier.
+model MemberTier {
+  id              Int    @id @default(autoincrement())
+  tenantId        Int
+  tenant          Tenant @relation(fields: [tenantId], references: [id])
+  name            String // Bronze, Silver, Gold
+  minSpent        Float  @default(0) // totalSpent needed to reach this tier
+  pointMultiplier Float  @default(1) // points-earned multiplier at this tier
+  sortOrder       Int    @default(0)
+
+  members Member[]
+
+  @@unique([tenantId, name])
+}
+
+// Redeemable reward (tenant-wide point catalog): spend points for a baht discount or a free item.
+model Reward {
+  id         Int     @id @default(autoincrement())
+  tenantId   Int
+  tenant     Tenant  @relation(fields: [tenantId], references: [id])
+  name       String
+  pointsCost Int
+  type       String // DISCOUNT_AMOUNT | FREE_ITEM
+  value      Float   @default(0) // DISCOUNT_AMOUNT: baht off the bill
+  menuItemId Int? // FREE_ITEM: the menu item granted (plain id, validated per branch)
+  isActive   Boolean @default(true)
+}
+
+model Booking {
+  id           Int          @id @default(autoincrement())
+  docNo        String       @unique // BK-...
+  branchId     Int
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  memberId     Int?
+  member       Member?      @relation(fields: [memberId], references: [id])
+  tableId      Int?
+  table        DiningTable? @relation(fields: [tableId], references: [id])
+  customerName String
+  phone        String
+  guestCount   Int          @default(2)
+  bookingTime  DateTime
+  deposit      Float        @default(0)
+  status       String       @default("BOOKED") // BOOKED, ARRIVED, CANCELLED, NO_SHOW
+  note         String?
+  createdAt    DateTime     @default(now())
+
+  orders SalesOrder[]
+}
+
+model Promotion {
+  id       Int       @id @default(autoincrement())
+  branchId Int
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  code     String
+  name     String
+  type     String // PERCENT, AMOUNT (ignored when scope = BXGY)
+  value    Float
+  minSpend Float     @default(0)
+  startsAt DateTime?
+  endsAt   DateTime?
+  isActive Boolean   @default(true)
+
+  // --- engine depth ---
+  scope      String  @default("ORDER") // ORDER | ITEM | CATEGORY | BXGY
+  menuItemId Int? // ITEM scope target, or BXGY "buy/get" item (plain id, validated per branch)
+  categoryId Int? // CATEGORY scope target (plain id, validated per branch)
+  buyQty     Int? // BXGY: buy N of the target...
+  getQty     Int? // ...get M free (or `value`% off the cheapest M)
+  memberOnly Boolean @default(false) // only billable when the order has a member
+  days       String? // weekday filter "0123456" (null = any day)
+  startMin   Int? // time-of-day window start (minutes from midnight; null = all day)
+  endMin     Int?
+  usageLimit Int? // max total redemptions (null = unlimited)
+  usedCount  Int     @default(0)
+
+  @@unique([branchId, code])
+}
+
+// ----- Audit + document numbering -----
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // login, create_order, void, refund, close_shift, ...
+  entity    String?
+  entityId  String?
+  before    String? // JSON snapshot
+  after     String? // JSON snapshot
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Counter {
+  id  Int    @id @default(autoincrement())
+  key String @unique // e.g. SO-BR01-202606
+  seq Int    @default(0)
+}
