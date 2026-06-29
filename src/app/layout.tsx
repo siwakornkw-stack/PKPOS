@@ -12,7 +12,7 @@ const sarabun = Sarabun({
 
 export const metadata: Metadata = {
   title: "PkPos - ระบบขายหน้าร้านสำหรับร้านอาหาร",
-  description: "Production-ready Restaurant POS: Dine-in / Takeaway / Delivery",
+  description: "Production-ready PkPos: Dine-in / Takeaway / Delivery",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "PkPos", statusBarStyle: "default" },
   icons: { icon: "/icon.svg", apple: "/icon.svg" },

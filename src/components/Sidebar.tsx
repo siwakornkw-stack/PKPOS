@@ -73,7 +73,7 @@ export function Sidebar() {
       </nav>
 
       <div className="px-5 py-3 border-t border-white/10 text-[11px] text-brand-200">
-        v0.1 - by BUGpairoj
+        v0.1
       </div>
     </aside>
   );

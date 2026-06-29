@@ -103,7 +103,6 @@ export default function LoginPage() {
         <p className="text-center text-brand-100 text-sm mt-4">
           ยังไม่มีบัญชี? <a href="/signup" className="font-semibold underline">สมัครใช้งานฟรี 14 วัน</a>
         </p>
-        <p className="text-center text-brand-100/70 text-xs mt-2">by BUGpairoj - Restaurant POS</p>
       </div>
     </div>
   );

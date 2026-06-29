@@ -1,7 +1,7 @@
 {
   "name": "PkPos - ระบบขายหน้าร้าน",
   "short_name": "PkPos",
-  "description": "Restaurant POS: Dine-in / Takeaway / Delivery",
+  "description": "PkPos: Dine-in / Takeaway / Delivery",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#065f46",
