@@ -7,7 +7,7 @@ import { PageHeader, Modal, Badge } from "@/components/ui";
 import { baht } from "@/lib/format";
 import { hhmmToMin, minToHhmm, WEEKDAY_LABELS } from "@/lib/timewin";
 
-interface MenuItem { id: number; name: string; code: string; barcode?: string | null; price: number; cost: number; categoryId: number; isAvailable: boolean; isActive: boolean; isOpenPrice?: boolean; }
+interface MenuItem { id: number; name: string; code: string; barcode?: string | null; price: number; cost: number; categoryId: number; isAvailable: boolean; isActive: boolean; isOpenPrice?: boolean; imageUrl?: string | null; }
 interface Category { id: number; name: string; items: MenuItem[]; }
 interface TimePrice { id: number; name: string; channel: string | null; days: string; startMin: number; endMin: number; price: number; priority: number; }
 const CHANNELS = [{ v: "", l: "ทุกช่องทาง" }, { v: "DINE_IN", l: "ทานที่ร้าน" }, { v: "TAKEAWAY", l: "กลับบ้าน" }, { v: "DELIVERY", l: "เดลิเวอรี" }];
@@ -83,21 +83,64 @@ export default function MenuPage() {
   );
 }
 
+// Resize a picked image to a small JPEG data URL (keeps the DB row + payload light).
+async function fileToResizedDataUrl(file: File, max = 400, quality = 0.7): Promise<string> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const im = new window.Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl;
+  });
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function ImagePicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return;
+    setBusy(true);
+    try { onChange(await fileToResizedDataUrl(f)); } catch { /* ignore bad image */ } finally { setBusy(false); e.target.value = ""; }
+  }
+  return (
+    <div>
+      <label className="label">รูปเมนู</label>
+      <div className="flex items-center gap-3">
+        <div className="h-16 w-16 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center text-gray-300 text-[10px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {value ? <img src={value} alt="" className="h-full w-full object-cover" /> : "ไม่มีรูป"}
+        </div>
+        <div className="flex flex-col gap-1 text-sm">
+          <label className="btn-ghost cursor-pointer">
+            <input type="file" accept="image/*" className="hidden" onChange={pick} />
+            {busy ? "กำลังย่อรูป..." : "อัปโหลดรูป"}
+          </label>
+          {value && <button type="button" onClick={() => onChange(null)} className="text-xs text-rose-600 text-left">ลบรูป</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditModal({ item, onClose, onSaved }: { item: MenuItem | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [price, setPrice] = useState(0);
   const [cost, setCost] = useState(0);
   const [openPrice, setOpenPrice] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  useEffect(() => { if (item) { setName(item.name); setBarcode(item.barcode ?? ""); setPrice(item.price); setCost(item.cost); setOpenPrice(!!item.isOpenPrice); setErr(""); } }, [item]);
+  useEffect(() => { if (item) { setName(item.name); setBarcode(item.barcode ?? ""); setPrice(item.price); setCost(item.cost); setOpenPrice(!!item.isOpenPrice); setImageUrl(item.imageUrl ?? null); setErr(""); } }, [item]);
   if (!item) return null;
 
   async function save() {
     setErr("");
     const res = await fetch(`/api/menu/${item!.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, barcode: barcode.trim() || null, price, cost, isOpenPrice: openPrice }),
+      body: JSON.stringify({ name, barcode: barcode.trim() || null, price, cost, isOpenPrice: openPrice, imageUrl }),
     });
     if (res.ok) onSaved();
     else setErr((await res.json()).error?.message ?? "บันทึกไม่สำเร็จ");
@@ -112,6 +155,7 @@ function EditModal({ item, onClose, onSaved }: { item: MenuItem | null; onClose:
           <div><label className="label">ต้นทุน</label><input type="number" className="input" value={cost} onChange={(e) => setCost(Number(e.target.value))} /></div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={openPrice} onChange={(e) => setOpenPrice(e.target.checked)} /> ราคาเปิด (กรอกราคาตอนขาย)</label>
+        <ImagePicker value={imageUrl} onChange={setImageUrl} />
         {err && <p className="text-sm text-rose-600">{err}</p>}
         <button onClick={save} className="btn-primary w-full">บันทึก</button>
         <TimePriceManager menuItemId={item.id} />
@@ -187,18 +231,18 @@ function TimePriceManager({ menuItemId }: { menuItemId: number }) {
 }
 
 function AddModal({ open, categories, onClose, onSaved }: { open: boolean; categories: Category[]; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ code: "", barcode: "", name: "", price: 0, cost: 0, categoryId: 0, isOpenPrice: false });
+  const [form, setForm] = useState({ code: "", barcode: "", name: "", price: 0, cost: 0, categoryId: 0, isOpenPrice: false, imageUrl: "" });
   const [err, setErr] = useState("");
   useEffect(() => { if (open && categories[0]) setForm((f) => ({ ...f, categoryId: categories[0].id })); }, [open, categories]);
 
   async function save() {
     setErr("");
-    const { barcode, ...rest } = form;
+    const { barcode, imageUrl, ...rest } = form;
     const res = await fetch("/api/menu", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...rest, ...(barcode.trim() ? { barcode: barcode.trim() } : {}), categoryId: Number(form.categoryId), price: Number(form.price), cost: Number(form.cost) }),
+      body: JSON.stringify({ ...rest, ...(barcode.trim() ? { barcode: barcode.trim() } : {}), ...(imageUrl ? { imageUrl } : {}), categoryId: Number(form.categoryId), price: Number(form.price), cost: Number(form.cost) }),
     });
-    if (res.ok) { setForm({ code: "", barcode: "", name: "", price: 0, cost: 0, categoryId: categories[0]?.id ?? 0, isOpenPrice: false }); onSaved(); }
+    if (res.ok) { setForm({ code: "", barcode: "", name: "", price: 0, cost: 0, categoryId: categories[0]?.id ?? 0, isOpenPrice: false, imageUrl: "" }); onSaved(); }
     else { const d = await res.json(); setErr(d.error?.message ?? "บันทึกไม่สำเร็จ"); }
   }
   return (
@@ -219,6 +263,7 @@ function AddModal({ open, categories, onClose, onSaved }: { open: boolean; categ
           <div><label className="label">ต้นทุน</label><input type="number" className="input" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.isOpenPrice} onChange={(e) => setForm({ ...form, isOpenPrice: e.target.checked })} /> ราคาเปิด (กรอกราคาตอนขาย)</label>
+        <ImagePicker value={form.imageUrl || null} onChange={(v) => setForm({ ...form, imageUrl: v ?? "" })} />
         {err && <p className="text-sm text-rose-600">{err}</p>}
         <button onClick={save} className="btn-primary w-full">เพิ่มเมนู</button>
       </div>

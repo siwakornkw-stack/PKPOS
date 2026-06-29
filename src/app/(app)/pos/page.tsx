@@ -16,7 +16,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 interface Opt { id: number; name: string; priceDelta: number; }
 interface OptGroup { id: number; name: string; minSelect: number; maxSelect: number; required: boolean; options: Opt[]; }
-interface MenuItem { id: number; name: string; price: number; code: string; isAvailable: boolean; isOpenPrice?: boolean; categoryId: number; prices?: { channel: string; price: number }[]; optionGroups?: { group: OptGroup }[]; }
+interface MenuItem { id: number; name: string; price: number; code: string; isAvailable: boolean; isOpenPrice?: boolean; categoryId: number; imageUrl?: string | null; prices?: { channel: string; price: number }[]; optionGroups?: { group: OptGroup }[]; }
 interface Category { id: number; name: string; items: MenuItem[]; }
 interface OrderItemOption { name: string; priceDelta: number; }
 interface OrderItem { id: number; name: string; qty: number; unitPrice: number; discount: number; lineAmount: number; status: string; options?: OrderItemOption[]; }
@@ -422,8 +422,11 @@ function POSInner() {
                 onClick={() => tileClick(m)}
                 className="card p-3 text-left hover:border-brand-400 hover:shadow-md transition disabled:opacity-40 disabled:line-through"
               >
-                <div className="h-16 rounded-lg bg-gradient-to-br from-brand-100 to-emerald-50 mb-2 flex items-center justify-center text-brand-600 font-bold text-lg">
-                  {m.name.charAt(0)}
+                <div className="h-16 rounded-lg overflow-hidden bg-gradient-to-br from-brand-100 to-emerald-50 mb-2 flex items-center justify-center text-brand-600 font-bold text-lg">
+                  {m.imageUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={m.imageUrl} alt="" className="h-full w-full object-cover" />
+                    : m.name.charAt(0)}
                 </div>
                 <p className="text-sm font-medium text-gray-700 line-clamp-2 leading-tight">{m.name}</p>
                 <div className="flex items-center justify-between mt-1">

@@ -14,6 +14,7 @@ const patchSchema = z.object({
   isAvailable: z.boolean().optional(),
   isActive: z.boolean().optional(),
   isOpenPrice: z.boolean().optional(),
+  imageUrl: z.string().max(700000).nullable().optional(), // "" / null clears the photo
 });
 
 export async function PATCH(

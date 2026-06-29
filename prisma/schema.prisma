@@ -117,6 +117,8 @@ model Branch {
   lineManStoreId   String? // LINE MAN store id
   shopeeStoreId    String? // ShopeeFood store id
   etaxEnabled      Boolean  @default(false) // submit full tax invoices to e-Tax
+  printMode        String   @default("direct") // direct (server -> LAN printer) | agent (on-site print-agent polls a queue; for cloud hosting)
+  printAgentToken  String? // shared secret the local print-agent uses to claim print jobs
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -139,6 +141,7 @@ model Branch {
   printers       Printer[]
   cashMovements  CashMovement[]
   attendances    Attendance[]
+  printJobs      PrintJob[]
 }
 
 // Network (ESC/POS) printer. Add via Settings -> เครื่องพิมพ์.
@@ -152,6 +155,26 @@ model Printer {
   type     String // RECEIPT | KITCHEN
   station  String? // KITCHEN only: which station it serves (null = all)
   isActive Boolean @default(true)
+}
+
+// A queued print job for the on-site print-agent. A cloud deploy can't reach a LAN printer
+// directly, so jobs are queued here and an agent running inside the shop's network pulls and
+// prints them (and kicks the cash drawer). Used when Branch.printMode = "agent".
+model PrintJob {
+  id        Int       @id @default(autoincrement())
+  branchId  Int
+  branch    Branch    @relation(fields: [branchId], references: [id])
+  kind      String // RECEIPT | KITCHEN | PREBILL | DRAWER
+  host      String // target printer host (hint; the agent may map it locally)
+  port      Int       @default(9100)
+  payload   String // base64 ESC/POS bytes to send to the printer
+  status    String    @default("PENDING") // PENDING | DONE | ERROR
+  error     String?
+  createdAt DateTime  @default(now())
+  claimedAt DateTime?
+  doneAt    DateTime?
+
+  @@index([branchId, status, createdAt])
 }
 
 // Single-use voucher/gift code (distinct from reusable Promotion).
@@ -265,6 +288,7 @@ model MenuItem {
   price       Float
   cost        Float        @default(0)
   color       String? // tile color hint
+  imageUrl    String? // menu photo (data URL or external URL)
   isCombo     Boolean      @default(false) // bundle of other items (set menu)
   isOpenPrice Boolean      @default(false) // cashier enters the price at sale time (ราคาเปิด)
   isActive    Boolean      @default(true)

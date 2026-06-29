@@ -8,6 +8,7 @@ export async function POST() {
   const auth = await requireBranch(PERMISSIONS.POS_ACCESS);
   if (auth instanceof Response) return auth;
 
+  const branch = await prisma.branch.findUnique({ where: { id: auth.branchId }, select: { printMode: true } });
   const printer = await prisma.printer.findFirst({
     where: { branchId: auth.branchId, isActive: true, type: "RECEIPT" },
   });
@@ -15,10 +16,15 @@ export async function POST() {
   const port = printer?.port ?? Number(process.env.PRINTER_PORT || 9100);
 
   if (host) {
-    try {
-      await sendToPrinter(host, port, DRAWER_KICK);
-    } catch (e) {
-      return apiError(502, "เปิดลิ้นชักไม่สำเร็จ: " + (e instanceof Error ? e.message : "error"));
+    if (branch?.printMode === "agent") {
+      // queue the drawer kick for the on-site print-agent (same reason as printing)
+      await prisma.printJob.create({ data: { branchId: auth.branchId, kind: "DRAWER", host, port, payload: DRAWER_KICK.toString("base64") } });
+    } else {
+      try {
+        await sendToPrinter(host, port, DRAWER_KICK);
+      } catch (e) {
+        return apiError(502, "เปิดลิ้นชักไม่สำเร็จ: " + (e instanceof Error ? e.message : "error"));
+      }
     }
   }
 

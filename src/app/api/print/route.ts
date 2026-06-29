@@ -72,22 +72,28 @@ export async function POST(req: NextRequest) {
   }
 
   let printed = 0;
-  const errors: string[] = [];
-  for (const t of targets) {
-    try {
-      await sendToPrinter(t.host, t.port, t.buffer);
-      printed++;
-    } catch (e) {
-      errors.push(`${t.name}: ${e instanceof Error ? e.message : String(e)}`);
+  const agentMode = order.branch.printMode === "agent";
+  if (agentMode) {
+    // cloud server can't reach a LAN printer directly: queue jobs for the on-site print-agent
+    if (targets.length)
+      await prisma.printJob.createMany({
+        data: targets.map((t) => ({ branchId, kind: target.toUpperCase(), host: t.host, port: t.port, payload: t.buffer.toString("base64") })),
+      });
+    printed = targets.length;
+  } else {
+    const errors: string[] = [];
+    for (const t of targets) {
+      try { await sendToPrinter(t.host, t.port, t.buffer); printed++; }
+      catch (e) { errors.push(`${t.name}: ${e instanceof Error ? e.message : String(e)}`); }
     }
+    if (targets.length > 0 && printed === 0)
+      return apiError(502, "พิมพ์ไม่สำเร็จ: " + errors.join("; "));
   }
-  if (targets.length > 0 && printed === 0)
-    return apiError(502, "พิมพ์ไม่สำเร็จ: " + errors.join("; "));
 
   await writeAudit({
     userId: user.id, action: "print", entity: "sales_order", entityId: orderId,
-    after: { target, docNo: order.docNo, printed },
+    after: { target, docNo: order.docNo, printed, queued: agentMode },
   });
 
-  return Response.json({ ok: true, printed, bytes: fallbackBuffer.length, base64: fallbackBuffer.toString("base64") });
+  return Response.json({ ok: true, printed, queued: agentMode, bytes: fallbackBuffer.length, base64: fallbackBuffer.toString("base64") });
 }

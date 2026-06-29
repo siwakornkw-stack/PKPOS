@@ -280,6 +280,53 @@ function BusinessSettings() {
 
 interface PrinterRow { id: number; name: string; host: string; port: number; type: string; station: string | null; isActive: boolean; }
 
+function PrintMode() {
+  const [mode, setMode] = useState("direct");
+  const [token, setToken] = useState("");
+  const [saving, setSaving] = useState(false);
+  const load = useCallback(async () => {
+    const d = await (await fetch("/api/branch-settings")).json();
+    setMode(d.branch?.printMode ?? "direct");
+    setToken(d.branch?.printAgentToken ?? "");
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(body: Record<string, unknown>) {
+    setSaving(true);
+    await fetch("/api/branch-settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await load();
+    setSaving(false);
+  }
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  return (
+    <div className="card p-4">
+      <div className="font-bold text-gray-700 mb-1 flex items-center gap-2"><Printer className="h-4 w-4" /> โหมดพิมพ์</div>
+      <p className="text-xs text-gray-500 mb-3">ตรง = เซิร์ฟเวอร์สั่งพิมพ์ไป printer ใน LAN ตรงๆ (ใช้เมื่อรันในร้าน). ผ่าน Agent = รันบน cloud ได้ โดยมีโปรแกรม print-agent ในร้านดึงงานไปพิมพ์/เปิดลิ้นชัก</p>
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => save({ printMode: "direct" })} disabled={saving} className={mode === "direct" ? "btn-primary py-1.5" : "btn-ghost py-1.5"}>ตรง (LAN)</button>
+        <button onClick={() => save({ printMode: "agent" })} disabled={saving} className={mode === "agent" ? "btn-primary py-1.5" : "btn-ghost py-1.5"}>ผ่าน Agent (cloud)</button>
+      </div>
+      {mode === "agent" && (
+        <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-3">
+          <div>
+            <label className="label">Agent token (เก็บเป็นความลับ)</label>
+            <div className="flex gap-2">
+              <input readOnly value={token} className="input font-mono text-xs" onFocus={(e) => e.target.select()} />
+              <button onClick={() => save({ regenAgentToken: true })} disabled={saving} className="btn-ghost py-1.5 whitespace-nowrap">สร้างใหม่</button>
+            </div>
+          </div>
+          <div>
+            <label className="label">รันในร้าน (เครื่องที่ถึง printer ได้, Node 18+)</label>
+            <code className="block bg-gray-900 text-gray-100 rounded p-2 text-[11px] overflow-x-auto">SERVER={origin} TOKEN={token || "<token>"} node print-agent.mjs</code>
+            <p className="text-[11px] text-gray-500 mt-1">ดาวน์โหลด scripts/print-agent.mjs จาก repo และตั้ง host ของ printer = IP ในตารางด้านล่าง</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Printers() {
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [adding, setAdding] = useState(false);
@@ -301,7 +348,9 @@ function Printers() {
   }
 
   return (
-    <div className="card overflow-hidden max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
+      <PrintMode />
+      <div className="card overflow-hidden">
       <div className="px-4 py-3 font-bold text-gray-700 border-b border-gray-100 flex items-center justify-between">
         <span className="flex items-center gap-2"><Printer className="h-4 w-4" /> เครื่องพิมพ์ (ESC/POS network)</span>
         <button onClick={() => setAdding(true)} className="btn-primary py-1.5"><Plus className="h-4 w-4" /> เพิ่มเครื่องพิมพ์</button>
@@ -328,6 +377,7 @@ function Printers() {
         </tbody>
       </table>
       <AddPrinterModal open={adding} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />
+      </div>
     </div>
   );
 }

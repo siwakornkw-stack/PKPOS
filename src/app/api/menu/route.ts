@@ -43,6 +43,7 @@ const itemSchema = z.object({
   cost: z.number().nonnegative().default(0),
   description: z.string().optional(),
   isOpenPrice: z.boolean().optional(),
+  imageUrl: z.string().max(700000).optional(), // menu photo (data URL); kept small by client-side resize
 });
 
 // POST: create a menu item (Menu Management)
