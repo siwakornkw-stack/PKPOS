@@ -1,0 +1,13 @@
+node_modules/
+dist/
+
+# Capacitor native project is generated with `npx cap add android`; regenerate rather than commit build output.
+android/app/src/main/assets/public/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
+android/keystore.properties
+*.keystore
+*.jks
