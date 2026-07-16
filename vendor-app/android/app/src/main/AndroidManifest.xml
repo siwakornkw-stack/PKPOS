@@ -34,11 +34,10 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- AdMob app id. This is Google's TEST app id — replace with your real one before publishing.
-             (This ~id is the app id, different from the /unit ids in src/lib/ads.ts.) -->
+        <!-- PkPos AdMob app id (real). The ~id is the app id, different from the /unit ids in src/lib/ads.ts. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-3338571139004995~6810100287" />
     </application>
 
     <!-- Permissions -->

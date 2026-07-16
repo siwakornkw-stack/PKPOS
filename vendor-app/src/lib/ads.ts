@@ -1,11 +1,11 @@
 import { Capacitor } from "@capacitor/core";
 import { AdMob, BannerAdSize, BannerAdPosition, AdmobConsentStatus } from "@capacitor-community/admob";
 
-// Google's PUBLIC TEST ad units. Safe to run while developing, but REPLACE both with your
-// own AdMob unit ids before publishing — real traffic on test ids earns nothing and breaks
-// AdMob policy. Also set the app id in android/app/src/main/AndroidManifest.xml (see README).
-const BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
-const INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712";
+// Real PkPos AdMob ad units (app com.pkpos.vendor). Swap back to Google's public test ids
+// (ca-app-pub-3940256099942544/...) if you need to test locally without earning. The matching
+// app id lives in android/app/src/main/AndroidManifest.xml.
+const BANNER_ID = "ca-app-pub-3338571139004995/6235385215";
+const INTERSTITIAL_ID = "ca-app-pub-3338571139004995/6445615692";
 
 const native = Capacitor.isNativePlatform();
 
