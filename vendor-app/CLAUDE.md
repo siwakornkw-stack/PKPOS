@@ -52,8 +52,13 @@ Free, offline-first consumer POS for small Thai vendors / street stalls. Vite + 
 - Monetized with AdMob (real ids wired). AdMob payments (bank/tax) are configured in the AdMob console; new ad units take ~1h to serve and a new AdMob app is reviewed (~2-3 days). Link the AdMob app to the Play listing once the app is public.
 
 ## Current state (as of 2026-07-23)
+- **versionCode 5 / versionName 1.4** — the feature-parity release (modifiers, stock, members/points, promotions, shifts, richer reports, soft void). Committed as `bbee646` on `main` and pushed to origin.
+- **AAB v5 is built and signed** at `android/app/build/outputs/bundle/release/app-release.aab` (~6.7 MB) but **not uploaded to any track yet**. It is a build output, so it is gitignored — rebuild it rather than looking for it in the repo. v4 was built and committed but never uploaded, and its artifact predates this release, so 5 supersedes it. Uploading always needs a versionCode higher than the last one uploaded.
 - Play tracks: **internal** = v3, **closed "Alpha"** = v2. Only the closed track counts toward production access — 12 testers are on the list and the 14-day clock runs there. Internal is just for quick test installs.
-- **versionCode 5 / versionName 1.4** is the current source. v4 was built and committed but never uploaded, and its artifact no longer matches the source (the feature-parity release landed after it), so 5 supersedes it — no AAB has been built for 5 yet. Uploading a build always needs a versionCode higher than the last one uploaded.
+- v5 carries an **IndexedDB migration (schema v2 → v3)** adding the customers, promos, shifts and cashmoves stores. The upgrade path was exercised against a database holding existing sales, but install v5 over an older build on a real device before pushing it to the closed track — those 12 testers have real data.
 - AdMob: app + banner/interstitial units exist and are wired into the code. **Payments (bank/tax) are not set up yet**, so nothing is withdrawable, and real ads only start serving after the AdMob app review (~2-3 days) plus ~1h per new ad unit.
-- Store listing is complete (icon, feature graphic, 4 screenshots, Thai copy).
-- Next steps: upload v4 → finish AdMob payments → apply for production once the closed test clears 14 days with 12 opted-in testers.
+- Store listing is complete (icon, feature graphic, 4 screenshots, Thai copy). It predates v5 and does not mention any of the new features — the copy in PUBLISH.md is the old wording.
+- Next steps: upload v5 to the closed track → finish AdMob payments → apply for production once the closed test clears 14 days with 12 opted-in testers.
+
+## Verifying changes without a device
+`npm run dev` serves the whole POS in a browser (AdMob calls are no-ops off-native), so sale flows, IndexedDB migrations and reports can all be checked there. Reading state straight out of IndexedDB via devtools is the fastest way to confirm that a flow persisted what it should — that is how the void-reversal bug below was caught.
