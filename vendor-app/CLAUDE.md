@@ -41,3 +41,10 @@ Free, offline-first consumer POS for small Thai vendors / street stalls. Vite + 
 - Distribute via testing tracks: **internal testing** for quick tester downloads (no review, near-instant); **closed testing** is required to unlock production access on a personal developer account (12 opted-in testers running for 14 days).
 - App-specific account, track, and tester details are personal and are NOT committed here.
 - Monetized with AdMob (real ids wired). AdMob payments (bank/tax) are configured in the AdMob console; new ad units take ~1h to serve and a new AdMob app is reviewed (~2-3 days). Link the AdMob app to the Play listing once the app is public.
+
+## Current state (as of 2026-07-16)
+- Play tracks: **internal** = v3, **closed "Alpha"** = v2. Only the closed track counts toward production access — 12 testers are on the list and the 14-day clock runs there. Internal is just for quick test installs.
+- **AAB v4** (versionCode 4 / versionName 1.3 — real AdMob ids + the brand launcher icon) is built and committed but **not uploaded to any track yet**. Uploading a build always needs a versionCode higher than the last one uploaded.
+- AdMob: app + banner/interstitial units exist and are wired into the code. **Payments (bank/tax) are not set up yet**, so nothing is withdrawable, and real ads only start serving after the AdMob app review (~2-3 days) plus ~1h per new ad unit.
+- Store listing is complete (icon, feature graphic, 4 screenshots, Thai copy).
+- Next steps: upload v4 → finish AdMob payments → apply for production once the closed test clears 14 days with 12 opted-in testers.
