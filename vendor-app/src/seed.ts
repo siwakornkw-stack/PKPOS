@@ -3,13 +3,43 @@ import type { Item } from "./types";
 
 // Stable ids make seeding idempotent: putItem is an upsert by key, so running this
 // concurrently (React StrictMode double-mounts the effect in dev) still yields 8 rows, not 16.
+// A couple of rows carry options/stock so a new vendor can see what those features look like.
 const DEMO: Item[] = [
-  { id: "demo-1", name: "ข้าวกะเพราหมู", price: 50, category: "อาหาร", active: true },
+  {
+    id: "demo-1",
+    name: "ข้าวกะเพราหมู",
+    price: 50,
+    category: "อาหาร",
+    active: true,
+    options: [
+      {
+        id: "demo-g1",
+        name: "ความเผ็ด",
+        multi: false,
+        required: true,
+        choices: [
+          { id: "demo-c1", name: "ไม่เผ็ด", price: 0 },
+          { id: "demo-c2", name: "เผ็ดน้อย", price: 0 },
+          { id: "demo-c3", name: "เผ็ดมาก", price: 0 },
+        ],
+      },
+      {
+        id: "demo-g2",
+        name: "เพิ่มเติม",
+        multi: true,
+        required: false,
+        choices: [
+          { id: "demo-c4", name: "ไข่ดาว", price: 10 },
+          { id: "demo-c5", name: "พิเศษ", price: 10 },
+        ],
+      },
+    ],
+  },
   { id: "demo-2", name: "ข้าวผัดหมู", price: 50, category: "อาหาร", active: true },
   { id: "demo-3", name: "ผัดซีอิ๊ว", price: 55, category: "อาหาร", active: true },
   { id: "demo-4", name: "ต้มยำกุ้ง", price: 80, category: "อาหาร", active: true },
   { id: "demo-5", name: "น้ำเปล่า", price: 10, category: "เครื่องดื่ม", active: true },
-  { id: "demo-6", name: "โค้ก", price: 20, category: "เครื่องดื่ม", active: true },
+  { id: "demo-6", name: "โค้ก", price: 20, category: "เครื่องดื่ม", active: true, stock: 24 },
   { id: "demo-7", name: "ชาเย็น", price: 25, category: "เครื่องดื่ม", active: true },
   { id: "demo-8", name: "กาแฟเย็น", price: 30, category: "เครื่องดื่ม", active: true },
 ];

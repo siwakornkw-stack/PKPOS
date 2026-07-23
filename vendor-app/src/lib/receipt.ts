@@ -1,10 +1,15 @@
 import { Share } from "@capacitor/share";
 import type { Order } from "../types";
 import { baht } from "./format";
+import { optionsLabel } from "./options";
 
 export function receiptText(order: Order, shopName: string): string {
   const when = new Date(order.ts).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
-  const lines = order.lines.map((l) => `${l.name} x${l.qty}  ${baht(l.price * l.qty)}`);
+  const lines = order.lines.flatMap((l) => {
+    const row = `${l.name} x${l.qty}  ${baht(l.price * l.qty)}`;
+    const opts = optionsLabel(l);
+    return opts ? [row, `  + ${opts}`] : [row];
+  });
 
   // Only show a subtotal/discount breakdown when a discount was applied.
   const discountRows = order.discount
@@ -16,6 +21,11 @@ export function receiptText(order: Order, shopName: string): string {
       ? ["ชำระผ่าน QR พร้อมเพย์"]
       : [`รับเงิน  ${baht(order.received)}`, `ทอน  ${baht(order.change)}`];
 
+  const pointRows = [
+    ...(order.pointsUsed ? [`ใช้แต้ม  ${order.pointsUsed}`] : []),
+    ...(order.pointsEarned ? [`ได้แต้ม  ${order.pointsEarned}`] : []),
+  ];
+
   return [
     shopName,
     when,
@@ -25,6 +35,7 @@ export function receiptText(order: Order, shopName: string): string {
     ...discountRows,
     `รวม  ${baht(order.total)}`,
     ...paymentRows,
+    ...pointRows,
     "ขอบคุณที่ใช้บริการ",
   ].join("\n");
 }

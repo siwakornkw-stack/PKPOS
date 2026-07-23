@@ -8,11 +8,24 @@ This is a **separate app** from the B2B SaaS POS in the repo root — it does no
 
 ## What it does
 
-- **ขาย (Sale):** tap menu items into a cart, take cash, show change, save the bill. Supports
-  off-menu / open-price items, and sharing a text receipt (share sheet → LINE / print / save).
-- **เมนู (Menu):** add / edit / delete products (name, price, category, on-sale toggle).
-- **สรุป (Summary):** today's sales total, bill count, per-bill list, "close day",
-  CSV export, and JSON backup / restore (the escape hatch for local-only data — see below).
+- **ขาย (Sale):** tap menu items into a cart, take cash or PromptPay QR, show change, save the
+  bill. Items can carry **ตัวเลือก / ท็อปปิ้ง** (option groups, single or multi, required or not,
+  each with a price delta) — the same dish with different options becomes its own cart line.
+  Also supports off-menu / open-price items, park-and-recall bills, a manual or promo discount,
+  attaching a **สมาชิก** to earn and redeem points, and sharing a text receipt (share sheet →
+  LINE / print / save).
+- **เมนู (Menu):** add / edit / delete products (name, price, category, on-sale toggle), build
+  option groups, and optionally **นับสต็อก** per item — tracked items show what is left, refuse
+  to be added at zero, and decrement on payment.
+- **สรุป (Summary):** sales total and bill count for today / yesterday / 7 / 30 days, a
+  **กะการขาย** card (open with a float, log cash in/out, close by counting the drawer and seeing
+  the variance), breakdowns by payment method, category and hour, best sellers, a low-stock
+  warning, the per-bill list, "close day", CSV export, and JSON backup / restore (the escape
+  hatch for local-only data — see below).
+  Cancelling a bill is a **soft void**: it stays in the ledger and the CSV but leaves every
+  total, and the stock and member points it moved are put back.
+- **ตั้งค่า (Settings):** shop name, PromptPay id, the baht-per-point rate, and sub-screens for
+  **สมาชิก** (members, points, tiers) and **โปรโมชัน** (percent or baht off, optional minimum spend).
 - **Ads:** AdMob banner on the Menu/Summary screens (never on the Sale/checkout screen so it
   can't cause a mis-tap during payment); interstitial on "close day". Google UMP consent is
   requested on first launch before ads initialize.
