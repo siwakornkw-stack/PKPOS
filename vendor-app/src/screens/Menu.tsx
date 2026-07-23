@@ -32,7 +32,7 @@ export default function Menu() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="flex items-center justify-between p-3 bg-white border-b sticky top-0">
+      <div className="flex items-center justify-between p-3 bg-white border-b sticky top-0 z-10">
         <h1 className="font-semibold text-lg">เมนู ({items.length})</h1>
         <button onClick={() => setEdit(blank())} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm shadow-sm active:scale-95 transition">
           <Plus size={16} /> เพิ่ม
