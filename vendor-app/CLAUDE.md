@@ -44,7 +44,7 @@ Free, offline-first consumer POS for small Thai vendors / street stalls. Vite + 
 - All UI text is Thai.
 - Sale screen is responsive: full-width menu grid + bottom-sheet cart on phones (`<sm`, 640px), fixed sidebar cart on wider screens. `CartList` / `CartFooter` are shared by both. Keep this pattern.
 - All money math goes through `lib/totals.ts` (`round2`); PromptPay payloads through `lib/promptpay.ts`. Keep `lib/` pure and tested; screens hold the UI + IndexedDB calls.
-- Store listing screenshots map to Sale (sell), Menu, Sale (paid/done), Summary.
+- Store listing screenshots map to Sale (sell), Menu, Sale (paid/done), Summary. They were captured before v1.4 and show none of the new screens — reshoot them (options sheet, member sheet, the shift card and report breakdowns) when the listing is next updated.
 
 ## Publishing (Google Play)
 - Distribute via testing tracks: **internal testing** for quick tester downloads (no review, near-instant); **closed testing** is required to unlock production access on a personal developer account (12 opted-in testers running for 14 days).

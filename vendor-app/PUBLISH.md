@@ -62,25 +62,71 @@ Output: `android/app/build/outputs/bundle/release/app-release.aab` — this is w
 
 ## Store listing draft
 
+Current as of versionCode 5 / 1.4. Play limits: name 30, short 80, full 4000, what's-new 500.
+
 - **Name:** PkPos - แคชเชียร์ขายหน้าร้าน
-- **Short (80 chars):** POS ฟรี คิดเงิน ทอนเงิน สรุปยอดขาย ใช้ได้ออฟไลน์ ไม่ต้องสมัคร
+- **Short (80 chars):** POS ฟรี คิดเงิน ทอนเงิน ท็อปปิ้ง สต็อก สมาชิก ใช้ได้ออฟไลน์ ไม่ต้องสมัคร
 - **Full:**
   > PkPos คือแอปแคชเชียร์ (POS) ฟรีสำหรับร้านเล็ก แผงลอย และพ่อค้าแม่ค้า
+  > ทำงานออฟไลน์ 100% ไม่ต้องสมัคร ไม่ต้องต่อเน็ต ข้อมูลอยู่ในเครื่องคุณ
+  >
+  > ขายหน้าร้าน
   > - เพิ่มเมนู แตะขาย คิดเงิน ทอนเงินได้ทันที
-  > - รองรับรายการนอกเมนู (กำหนดราคาเอง)
-  > - สรุปยอดขายรายวัน ยกเลิกบิลได้
+  > - ตัวเลือก/ท็อปปิ้งต่อเมนู เช่น ระดับความเผ็ด ไข่ดาว พิเศษ บวกราคาให้อัตโนมัติ
+  > - รับเงินสด หรือสร้าง QR พร้อมเพย์ให้ลูกค้าสแกนจ่าย
+  > - รายการนอกเมนู กำหนดราคาเอง
+  > - พักบิลไว้ก่อน แล้วเรียกกลับมาคิดเงินทีหลัง
+  >
+  > สต็อกและเมนู
+  > - เปิดนับสต็อกเฉพาะเมนูที่ต้องการ เห็นจำนวนคงเหลือตอนขาย
+  > - ของหมดกดไม่ได้ กันขายเกิน
+  > - เตือนของใกล้หมด
+  >
+  > ลูกค้าและโปรโมชัน
+  > - สมาชิกสะสมแต้ม ใช้แต้มเป็นส่วนลดได้
+  > - ระดับสมาชิกเลื่อนอัตโนมัติตามยอดซื้อสะสม ยิ่งซื้อยิ่งได้แต้มเยอะ
+  > - โปรโมชันลดเป็น % หรือลดเป็นบาท ตั้งยอดซื้อขั้นต่ำได้
+  >
+  > เงินและรายงาน
+  > - เปิด-ปิดกะ นับเงินในลิ้นชัก บอกขาด/เกินให้เห็นชัด
+  > - บันทึกเงินเข้า-ออกที่ไม่ใช่การขาย เช่น ซื้อของ ทอนเพิ่ม
+  > - สรุปยอดวันนี้ เมื่อวาน 7 วัน 30 วัน
+  > - ดูยอดแยกตามช่องทางชำระ หมวดสินค้า และช่วงเวลา
+  > - เมนูขายดี
+  > - ยกเลิกบิลได้ คืนสต็อกและแต้มให้อัตโนมัติ
+  >
+  > ใบเสร็จและข้อมูล
   > - แชร์ใบเสร็จผ่าน LINE หรือปริ้นต์
-  > - ส่งออก CSV และสำรอง/กู้คืนข้อมูล
-  > - ทำงานออฟไลน์ 100% ข้อมูลอยู่ในเครื่อง ไม่ต้องสมัคร ไม่ต้องต่อเน็ต
+  > - ส่งออก CSV เปิดใน Excel ได้
+  > - สำรองและกู้คืนข้อมูลเป็นไฟล์
+  >
+  > ข้อมูลทั้งหมดเก็บในเครื่อง ไม่มีเซิร์ฟเวอร์ ไม่มีค่าบริการรายเดือน
+  > แนะนำให้สำรองข้อมูลก่อนเปลี่ยนเครื่องหรือล้างข้อมูลแอป
 - **Category:** Business
+
+### What's new (v1.4)
+
+  > - เพิ่มตัวเลือก/ท็อปปิ้งต่อเมนู บวกราคาให้อัตโนมัติ
+  > - นับสต็อกรายเมนู เตือนของใกล้หมด
+  > - สมาชิกสะสมแต้ม ใช้แต้มเป็นส่วนลด มีระดับสมาชิก
+  > - โปรโมชันลด % หรือลดบาท ตั้งยอดขั้นต่ำได้
+  > - เปิด-ปิดกะ นับเงินในลิ้นชัก บอกขาด/เกิน
+  > - รายงานแยกตามช่องทางชำระ หมวด และช่วงเวลา
+  > - ยกเลิกบิลแล้วคืนสต็อกและแต้มอัตโนมัติ
 
 ## Data safety form answers (because the app shows AdMob ads)
 
 - Does your app collect or share user data? **Yes** — via Google AdMob.
 - Data type: **Device or other IDs** (advertising ID). Purpose: **Advertising or marketing**.
 - Your own app's sales/menu data: stored **only on the device**, not collected or transmitted by you.
+- Since v1.4 the app can also store **member names and phone numbers** the vendor types in. This
+  still answers as **not collected**: Google defines collection as data leaving the device, and
+  nothing here is transmitted — it lives in IndexedDB and only moves if the vendor exports a
+  CSV/backup themselves. Do not tick "Personal info > Name / Phone number" for it, but be ready
+  to explain this in a review reply if asked.
 - Is data encrypted in transit? AdMob handles its own transport; your app sends nothing.
-- Can users request deletion? Data is local — uninstalling deletes it; the app has Backup/Restore.
+- Can users request deletion? Data is local — uninstalling deletes it; the app has Backup/Restore,
+  and members can be deleted individually in ตั้งค่า > สมาชิก.
 
 ## Notes
 
